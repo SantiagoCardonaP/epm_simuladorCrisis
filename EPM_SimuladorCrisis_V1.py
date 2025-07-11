@@ -7,11 +7,12 @@ from docx import Document
 import pandas as pd
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    ListFlowable, ListItem, Image as RLImage
+    ListFlowable, ListItem
 )
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
+import re
 
 # === CONFIGURACIÓN CLIENTE OPENAI ===
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
@@ -29,6 +30,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.markdown("<div style='margin-top: 220px;'></div>", unsafe_allow_html=True)
 
+# Fondo y tipografía
 image_path = "fondo-julius-epm.png"
 img = Image.open(image_path)
 buffered = io.BytesIO()
@@ -46,7 +48,7 @@ div.stButton > button:hover {{ background-color: #e64a19; color:#4B006E !importa
 </style>
 """, unsafe_allow_html=True)
 
-# === TÍTULO PRINCIPAL ===
+# === TÍTULOS PRINCIPALES ===
 st.markdown(
     """
     <div style='position: relative; z-index: 1; padding-top: 50px;'>
@@ -69,51 +71,68 @@ except Exception:
     st.stop()
 
 # === UPLOADER PARA BRIEFING ===
-brief_file = st.file_uploader("Briefing", type=["docx", "txt", "csv"] )
+brief_file = st.file_uploader("Briefing", type=["docx", "txt", "csv"])
+
+# === FUNCIONES AUXILIARES ===
+def md_to_html(txt):
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", txt)
 
 def parse_markdown(md_text):
     styles = getSampleStyleSheet()
     story = []
     table_buffer = []
     in_table = False
-    lines = md_text.split("\n")
 
-    for i, line in enumerate(lines):
-        # Tabla Markdown
+    def flush_table():
+        nonlocal table_buffer, in_table
+        table = Table(table_buffer, hAlign='LEFT')
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ff5722')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(table)
+        story.append(Spacer(1, 12))
+        table_buffer = []
+        in_table = False
+
+    for line in md_text.split("\n"):
+        # tabla markdown
+        if re.match(r"^\s*\|[-\s|]+$", line):
+            continue
         if line.startswith('|') and line.count('|') > 1:
             cells = [c.strip() for c in line.strip('|').split('|')]
             table_buffer.append(cells)
             in_table = True
             continue
-        # Final de tabla
-        if in_table and (not line.startswith('|') or line.count('|') <= 1):
-            tbl = Table(table_buffer, hAlign='LEFT')
-            tbl.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ff5722')),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                ('LEFTPADDING', (0,0), (-1,-1), 4),
-                ('RIGHTPADDING', (0,0), (-1,-1), 4),
-            ]))
-            story.append(tbl)
-            story.append(Spacer(1, 12))
-            table_buffer = []
-            in_table = False
-        # Encabezados y listas
+        if in_table:
+            flush_table()
+        # encabezados
         if line.startswith('# '):
-            story.append(Paragraph(line[2:], styles['Heading1']))
+            story.append(Paragraph(md_to_html(line[2:]), styles['Heading1']))
         elif line.startswith('## '):
-            story.append(Paragraph(line[3:], styles['Heading2']))
+            story.append(Paragraph(md_to_html(line[3:]), styles['Heading2']))
+        # listas numeradas
+        elif re.match(r"^\d+\.\s+", line):
+            num, text = re.match(r"^(\d+)\.\s+(.+)", line).groups()
+            item = Paragraph(md_to_html(text), styles['Normal'])
+            story.append(ListFlowable([ListItem(item, value=int(num))], bulletType='1', leftIndent=12))
+        # viñetas
         elif line.startswith('- '):
-            item = Paragraph(line[2:], styles['Normal'])
-            story.append(ListFlowable([ListItem(item)], bulletType='bullet', start='•', leftIndent=12))
+            item = Paragraph(md_to_html(line[2:]), styles['Normal'])
+            story.append(ListFlowable([ListItem(item)], bulletType='bullet', leftIndent=12))
+        # párrafo normal
         else:
-            if line.strip() == '':
-                story.append(Spacer(1, 12))
+            if not line.strip():
+                story.append(Spacer(1, 8))
             else:
-                story.append(Paragraph(line, styles['Normal']))
+                story.append(Paragraph(md_to_html(line), styles['Normal']))
+    if in_table:
+        flush_table()
     return story
 
 if brief_file:
@@ -126,6 +145,7 @@ if brief_file:
         df_br = pd.read_csv(brief_file)
         briefing = df_br.to_csv(index=False)
 
+    # Botón para generar y descargar informe
     if st.button('Descargar informe'):
         prompt_md = f"""
 Por favor, genera un informe de crisis en Markdown estructurado con:
@@ -153,16 +173,23 @@ Incluye tablas y placeholders para gráficos cuando aplique. Usa el siguiente co
             )
         md = resp.choices[0].message.content
 
-        # Generar PDF con ReportLab
+        # Generar PDF usando ReportLab
         buffer_pdf = io.BytesIO()
-        doc_pdf = SimpleDocTemplate(buffer_pdf, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+        doc_pdf = SimpleDocTemplate(buffer_pdf,
+                                     rightMargin=2*cm, leftMargin=2*cm,
+                                     topMargin=2*cm, bottomMargin=2*cm)
         story = parse_markdown(md)
         doc_pdf.build(story)
         pdf_bytes = buffer_pdf.getvalue()
 
+        # Botón de descarga centrado y estilizado
         b64 = base64.b64encode(pdf_bytes).decode()
-        href = f"<a href='data:application/pdf;base64,{b64}' download='informe_crisis.pdf'>Descargar informe PDF</a>"
-        st.markdown(href, unsafe_allow_html=True)
+        download_html = f"""
+<div style=\"display:flex;justify-content:center;align-items:center;margin:20px 0;\"> 
+  <a href=\"data:application/pdf;base64,{b64}\" download=\"informe_crisis.pdf\" style=\"background-color:#ff5722;color:#ffffff;font-weight:bold;padding:12px 24px;border-radius:50px;text-decoration:none;font-size:16px;\">Descargar informe PDF</a>
+</div>
+"""
+        st.markdown(download_html, unsafe_allow_html=True)
 
     # === PREGUNTAS ABIERTAS EN FORMULARIO ===
     st.markdown("<h3>¿Tienes alguna pregunta adicional sobre la simulación?</h3>", unsafe_allow_html=True)
