@@ -83,6 +83,26 @@ def parse_markdown(md_text):
     table_buffer = []
     in_table = False
 
+    # 1) Elimina fences
+    clean = []
+    for line in md_text.split("\n"):
+        if line.strip().startswith("```") or line.strip().startswith("```plaintext"):
+            continue
+        clean.append(line)
+    lines = clean
+
+    for line in lines:
+        # 2) Ignora línea separadora de tablas: solo guiones, espacios y barras
+        if re.match(r'^\s*[\-|\s]+$', line):
+            continue
+
+        # 3) Detecta inicio/continuación de tabla
+        if line.startswith("|") and line.count("|") > 1:
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            table_buffer.append(cells)
+            in_table = True
+            continue
+
     def flush_table():
         nonlocal table_buffer, in_table
         table = Table(table_buffer, hAlign='LEFT')
