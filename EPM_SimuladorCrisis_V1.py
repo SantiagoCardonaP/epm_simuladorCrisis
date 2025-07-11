@@ -83,26 +83,6 @@ def parse_markdown(md_text):
     table_buffer = []
     in_table = False
 
-    # 1) Elimina fences
-    clean = []
-    for line in md_text.split("\n"):
-        if line.strip().startswith("```") or line.strip().startswith("```plaintext"):
-            continue
-        clean.append(line)
-    lines = clean
-
-    for line in lines:
-        # 2) Ignora línea separadora de tablas: solo guiones, espacios y barras
-        if re.match(r'^\s*[\-|\s]+$', line):
-            continue
-
-        # 3) Detecta inicio/continuación de tabla
-        if line.startswith("|") and line.count("|") > 1:
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            table_buffer.append(cells)
-            in_table = True
-            continue
-
     def flush_table():
         nonlocal table_buffer, in_table
         table = Table(table_buffer, hAlign='LEFT')
@@ -181,7 +161,7 @@ Por favor, genera un informe de crisis estructurado con:
 ## 3. Recomendaciones
 - Lista de recomendaciones accionables.
 
-Incluye tablas y gráficos cuando aplique. Usa el siguiente contenido como briefing:
+Incluye tablas cuando aplique. Usa el siguiente contenido como briefing:
 
 {briefing}
 """
@@ -206,7 +186,7 @@ Incluye tablas y gráficos cuando aplique. Usa el siguiente contenido como brief
         b64 = base64.b64encode(pdf_bytes).decode()
         download_html = f"""
 <div style=\"display:flex;justify-content:center;align-items:center;margin:20px 0;\"> 
-  <a href=\"data:application/pdf;base64,{b64}\" download=\"informe_crisis.pdf\" style=\"background-color:#ff5722;color:#ffffff;font-weight:bold;padding:12px 24px;border-radius:50px;text-decoration:none;font-size:16px;\">Descargar informe PDF</a>
+  <a href=\"data:application/pdf;base64,{b64}\" download=\"informe_crisis.pdf\" style=\"color:#ffffff;font-weight:bold;padding:12px 24px;border-radius:50px;text-decoration:none;font-size:16px;\">Descargar informe PDF</a>
 </div>
 """
         st.markdown(download_html, unsafe_allow_html=True)
