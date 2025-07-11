@@ -6,5 +6,4 @@ openai>=1.0.0
 pillow
 python-docx
 fpdf
-markdown2
-weasyprint
+reportlab
