@@ -146,7 +146,7 @@ if brief_file:
         briefing = df_br.to_csv(index=False)
 
     # Botón para generar y descargar informe
-    if st.button('Descargar informe'):
+    if st.button('Generar informe'):
         prompt_md = f"""
 Por favor, genera un informe de crisis en Markdown estructurado con:
 
