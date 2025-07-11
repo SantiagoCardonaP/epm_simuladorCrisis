@@ -18,6 +18,27 @@ import re
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
 
 # === ESTILOS Y GRÁFICOS ===
+st.markdown(
+    f"""
+    <style>
+    h2 {{
+        font-size: 1.3em;
+        color: #ff5722;
+        font-weight: normal;
+        margin-bottom: 1em;
+    }}
+}}
+    h2#Sube-tu-briefing-para-iniciar-la-simulación{{
+    font-size: 1.4rem;
+    padding: 1rem 0px;
+    color: #ff5722 !important;
+    }}
+    
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 logo_path = "logo-grupo-epm (1).png"
 img = Image.open(logo_path)
 buffered = io.BytesIO()
