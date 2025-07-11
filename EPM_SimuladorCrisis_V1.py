@@ -5,8 +5,9 @@ import base64
 import io
 from docx import Document
 import pandas as pd
-import markdown2
-from weasyprint import HTML
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
 
 # === CONFIGURACIÓN CLIENTE OPENAI ===
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
@@ -32,8 +33,8 @@ img_b64 = base64.b64encode(buffered.getvalue()).decode()
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat&display=swap');
-html, body, [class*="css"] {{ font-family: 'Montserrat', sans-serif !important; }}
-.stApp {{ background-image: url("data:image/jpeg;base64,{img_b64}"); background-repeat: no-repeat; background-position: top center; background-size: auto; background-attachment: scroll; }}
+html, body, [class*=\"css\"] {{ font-family: 'Montserrat', sans-serif !important; }}
+.stApp {{ background-image: url(\"data:image/jpeg;base64,{img_b64}\"); background-repeat: no-repeat; background-position: top center; background-size: auto; background-attachment: scroll; }}
 .stApp .main .block-container {{ background-image: linear-gradient(to bottom, transparent 330px, #240531 330px) !important; background-repeat: no-repeat !important; background-size: 100% 100% !important; border-radius: 20px !important; padding: 50px !important; max-width: 800px !important; margin: 2rem auto !important; }}
 label, .stSelectbox label, .stMultiSelect label {{ color: white !important; font-size: 0.9em; }}
 div.stButton > button {{ background-color: #ff5722; color: #ffffff !important; font-weight: bold; font-size: 16px; padding: 12px 24px; border-radius: 50px; border: none; width: 100%; margin-top: 10px; }}
@@ -70,7 +71,7 @@ if brief_file:
     # Botón para descargar informe en PDF
     if st.button('Descargar informe'):
         prompt_md = f"""
-Por favor, genera un informe de crisis en **Markdown** estructurado con:
+Por favor, genera un informe de crisis en Markdown estructurado con:
 
 # Informe de Crisis
 
@@ -95,19 +96,25 @@ Incluye tablas y placeholders para gráficos cuando aplique. Usa el siguiente co
             )
         md = resp.choices[0].message.content
 
-        # Convertir Markdown a HTML y generar PDF
-        html = markdown2.markdown(md)
-        css = """
-        <style>
-        body { font-family: Arial, sans-serif; padding: 1cm; }
-        h1, h2, h3 { color: #240531; }
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-        th, td { border: 1px solid #ddd; padding: 8px; }
-        th { background-color: #ff5722; color: white; }
-        </style>
-        """
-        html_full = css + html
-        pdf_bytes = HTML(string=html_full).write_pdf()
+        # Generar PDF con ReportLab
+        buffer_pdf = io.BytesIO()
+        doc_pdf = SimpleDocTemplate(buffer_pdf, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+        styles = getSampleStyleSheet()
+        story = []
+        for line in md.split('\n'):
+            if line.startswith('# '):
+                story.append(Paragraph(line[2:], styles['Heading1']))
+            elif line.startswith('## '):
+                story.append(Paragraph(line[3:], styles['Heading2']))
+            elif line.startswith('- '):
+                story.append(Paragraph('• ' + line[2:], styles['Normal']))
+            else:
+                if line.strip() == '':
+                    story.append(Spacer(1, 12))
+                else:
+                    story.append(Paragraph(line, styles['Normal']))
+        doc_pdf.build(story)
+        pdf_bytes = buffer_pdf.getvalue()
 
         b64 = base64.b64encode(pdf_bytes).decode()
         href = f"<a href='data:application/pdf;base64,{b64}' download='informe_crisis.pdf'>Descargar informe PDF</a>"
