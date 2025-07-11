@@ -148,7 +148,7 @@ if brief_file:
     # Botón para generar y descargar informe
     if st.button('Generar informe'):
         prompt_md = f"""
-Por favor, genera un informe de crisis en Markdown estructurado con:
+Por favor, genera un informe de crisis estructurado con:
 
 # Informe de Crisis
 
@@ -161,7 +161,7 @@ Por favor, genera un informe de crisis en Markdown estructurado con:
 ## 3. Recomendaciones
 - Lista de recomendaciones accionables.
 
-Incluye tablas y placeholders para gráficos cuando aplique. Usa el siguiente contenido como briefing:
+Incluye tablas y gráficos cuando aplique. Usa el siguiente contenido como briefing:
 
 {briefing}
 """
