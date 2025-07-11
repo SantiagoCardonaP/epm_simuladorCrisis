@@ -57,6 +57,12 @@ st.markdown(
     """, unsafe_allow_html=True)
 st.markdown(
     """
+        h2 {{
+        font-size: 1.3em;
+        color: #ff5722;
+        font-weight: normal;
+        margin-bottom: 1em;
+    }}
     <div style='position: relative; z-index: 1;'>
         <h2 style='text-align: center;'>Sube tu briefing para iniciar la simulación</h2>
     </div>
