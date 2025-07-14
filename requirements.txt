@@ -7,4 +7,3 @@ pillow
 python-docx
 fpdf
 reportlab
-markdown
