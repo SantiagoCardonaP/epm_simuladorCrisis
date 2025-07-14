@@ -58,31 +58,36 @@ st.markdown(
 st.markdown(
     """
     <div style='position: relative; z-index: 1;'>
-        <h2 style='text-align: center;'>Sube tu briefing para iniciar la simulación</h2>
+        <h2 style='text-align: center;'>Genera tu informe a partir de los escenarios definidos</h2>
     </div>
     """, unsafe_allow_html=True)
 
-# === CARGA DE PROMPT BASE ===
-try:
-    base_doc = Document("Prompt_base.docx")
-    base_prompt = "\n".join(p.text for p in base_doc.paragraphs)
-except Exception:
-    st.error("No se pudo cargar 'Prompt_base.docx'. Asegúrate de tener el archivo en el directorio.")
-    st.stop()
-
-# === UPLOADER PARA BRIEFING ===
-brief_file = st.file_uploader("Briefing", type=["docx", "txt", "csv"])
-
-# === CAMPOS DE INPUT ADICIONALES ===
-contexto = st.text_area("Contexto", disabled=True)
-escenario1 = st.text_area("Escenario 1", disabled=True)
-escenario2 = st.text_area("Escenario 2", disabled=True)
-escenario3 = st.text_area("Escenario 3 (opcional)", disabled=True)
+# === CAMPOS DE INPUT PRELLENADOS ===
+contexto = st.text_area(
+    "Contexto",
+    value="Durante la segunda jornada del Foro de las Américas, la principal empresa de servicios públicos de del país con operación en Antioquia con presencia en energía, agua y gas. Su filial Ticsa en México, fueron víctimas de un ataque de tipo ransomware que comprometió el sistema de medición y facturación de consumos, dejando suspendido el servicio para más de 7 millones de usuarios, incluidos hogares, grandes clientes industriales y hospitales. La filtración de una imagen del sistema SCADA, difundida sin contexto técnico, desató una ola de desinformación en redes sociales que escaló rápidamente hacia teorías conspirativas y narrativas de sabotaje.\n\nLa magnitud del incidente, su sincronización con un evento internacional de alta visibilidad y la falta inicial de contención comunicacional, generaron un entorno de pánico ciudadano, presión política y riesgo de sanciones regulatorias.\n\nEl escenario pone en riesgo no solo la continuidad operativa y comercial de la compañía, sino también su reputación como actor estratégico en la infraestructura crítica del país y su credibilidad frente a audiencias clave como gobierno, inversionistas y opinión pública.",
+    height=200
+)
+escenario1 = st.text_area(
+    "Escenario 1",
+    value="Los medios de comunicación priorizan una narrativa escandalosa. Con titulares incendiarios, los influenciadores crean teorías de conspiración con alta Credibilidad entre las audiencias. El plan de mitigación no presenta resultados que mejoren la percepción y disminuyan los titulares y los contenidos virales negativos.",
+    height=150
+)
+escenario2 = st.text_area(
+    "Escenario 2",
+    value="Los medios de comunicación se tornan informativos y dejan atrás titulares incendiarios. Se concentran en informar el minuto a minuto y la desinformación de contenidos virales comienza a bajar gracias a los contenidos informativos que la marca despliegue a través de influenciadores, embajadores de marca y canales oficiales.",
+    height=150
+)
+escenario3 = st.text_area(
+    "Escenario 3 (opcional)",
+    value="Los medios de comunicación se tornan agresivos, sus titulares se tornan políticos, la superintendencia y los entes reguladores acusan a la compañía de ineficiente. Los contenidos virales se controlan gracias al despliegue de contenidos digitales que educan sobre el tema técnico, el plan de acción y las campañas de consciencia de uso adecuado de los servicios públicos.",
+    height=150
+)
 
 # === FUNCIONES AUXILIARES ===
 def md_to_html(text: str) -> str:
     """Reemplaza negritas Markdown por HTML"""
-    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    return re.sub(r"\*\*(.+?)\*\**", r"<b>\1</b>", text)
 
 
 def parse_markdown(md_text: str):
@@ -112,7 +117,6 @@ def parse_markdown(md_text: str):
         in_table = False
 
     for line in md_text.splitlines():
-        # Tablas Markdown
         if re.match(r"^\s*\|[-\s|]+$", line):
             continue
         if line.startswith('|') and line.count('|') > 1:
@@ -122,7 +126,6 @@ def parse_markdown(md_text: str):
             continue
         if in_table:
             flush_table()
-        # Encabezados
         if line.startswith('###### '):
             story.append(Paragraph(md_to_html(line[7:]), styles['Heading6']))
         elif line.startswith('##### '):
@@ -135,16 +138,13 @@ def parse_markdown(md_text: str):
             story.append(Paragraph(md_to_html(line[3:]), styles['Heading2']))
         elif line.startswith('# '):
             story.append(Paragraph(md_to_html(line[2:]), styles['Heading1']))
-        # Listas numeradas
         elif re.match(r"^\d+\.\s+", line):
             num, text = re.match(r"^(\d+)\.\s+(.+)", line).groups()
             item = Paragraph(md_to_html(text), styles['Normal'])
             story.append(ListFlowable([ListItem(item, value=int(num))], bulletType='1', leftIndent=12))
-        # Viñetas
         elif line.startswith('- '):
             item = Paragraph(md_to_html(line[2:]), styles['Normal'])
             story.append(ListFlowable([ListItem(item)], bulletType='bullet', leftIndent=12))
-        # Párrafos
         else:
             if not line.strip():
                 story.append(Spacer(1, 8))
@@ -155,19 +155,9 @@ def parse_markdown(md_text: str):
     return story
 
 # === LÓGICA PRINCIPAL ===
-if brief_file:
-    # Leer briefing
-    if brief_file.name.lower().endswith('.docx'):
-        docx = Document(brief_file)
-        briefing = "\n".join(p.text for p in docx.paragraphs)
-    elif brief_file.name.lower().endswith('.txt'):
-        briefing = brief_file.read().decode('utf-8')
-    else:
-        df = pd.read_csv(brief_file)
-        briefing = df.to_csv(index=False)
-
-    if st.button('Generar informe'):
-        prompt_md = f"""
+if st.button('Generar informe'):
+    briefing = f"Contexto:\n{contexto}\n\nEscenario 1:\n{escenario1}\n\nEscenario 2:\n{escenario2}\n\nEscenario 3:\n{escenario3}"
+    prompt_md = f"""
 Por favor, genera un informe estructurado con el título: 'Escenarios de Crisis'.
 
 Este es el prompt que debes usar como base:
@@ -176,55 +166,55 @@ Este es el prompt que debes usar como base:
 Incluye tablas cuando aplique. Usa el siguiente contenido como brief:
 {briefing}
 """
-        with st.spinner('Generando informe...'):
-            resp = client.chat.completions.create(
-                model='gpt-4o',
-                messages=[{'role':'user','content':prompt_md}],
-                temperature=0.3
-            )
-        md = resp.choices[0].message.content
+    with st.spinner('Generando informe...'):
+        resp = client.chat.completions.create(
+            model='gpt-4o',
+            messages=[{'role':'user','content':prompt_md}],
+            temperature=0.3
+        )
+    md = resp.choices[0].message.content
 
-        # Generar PDF
-        buffer_pdf = io.BytesIO()
-        doc_pdf = SimpleDocTemplate(buffer_pdf,
-                                     rightMargin=2*cm, leftMargin=2*cm,
-                                     topMargin=2*cm, bottomMargin=2*cm)
-        story = parse_markdown(md)
-        doc_pdf.build(story)
-        pdf_bytes = buffer_pdf.getvalue()
+    # Generar PDF
+    buffer_pdf = io.BytesIO()
+    doc_pdf = SimpleDocTemplate(buffer_pdf,
+                                 rightMargin=2*cm, leftMargin=2*cm,
+                                 topMargin=2*cm, bottomMargin=2*cm)
+    story = parse_markdown(md)
+    doc_pdf.build(story)
+    pdf_bytes = buffer_pdf.getvalue()
 
-        b64 = base64.b64encode(pdf_bytes).decode()
-        download_html = f"""
+    b64 = base64.b64encode(pdf_bytes).decode()
+    download_html = f"""
 <div style="display:flex;justify-content:center;align-items:center;margin:20px 0;"> 
   <a href="data:application/pdf;base64,{b64}" download="informe_crisis.pdf" style="color:#ffffff;font-weight:bold;padding:12px 24px;border-radius:50px;text-decoration:none;font-size:16px;">Descargar informe PDF</a>
 </div>
 """
-        st.markdown(download_html, unsafe_allow_html=True)
+    st.markdown(download_html, unsafe_allow_html=True)
 
-    # Preguntas abiertas
-    st.markdown("<h3>¿Tienes alguna pregunta adicional sobre la simulación?</h3>", unsafe_allow_html=True)
-    with st.form("preguntas_form"):
-        user_input = st.text_area("Escribe tu pregunta aquí…")
-        submit = st.form_submit_button("Generar respuesta")
-        if submit and user_input:
-            prompt_q = f"""
+# === PREGUNTAS ABIERTAS ===
+st.markdown("<h3>¿Tienes alguna pregunta adicional sobre la simulación?</h3>", unsafe_allow_html=True)
+with st.form("preguntas_form"):
+    user_input = st.text_area("Escribe tu pregunta aquí…")
+    submit = st.form_submit_button("Generar respuesta")
+    if submit and user_input:
+        prompt_q = f"""
 Toma el siguiente briefing y responde a la pregunta de forma clara:
 
 Briefing:
-{briefing}
+{contexto}\n\n{escenario1}\n\n{escenario2}\n\n{escenario3}
 
 Pregunta:
 {user_input}
 """
-            with st.spinner('Generando respuesta…'):
-                resp_q = client.chat.completions.create(
-                    model='gpt-4o',
-                    messages=[{'role':'user','content':prompt_q}],
-                    temperature=0.3
-                )
-            answer = resp_q.choices[0].message.content
-            st.markdown("### Respuesta de la IA")
-            st.write(answer)
+        with st.spinner('Generando respuesta…'):
+            resp_q = client.chat.completions.create(
+                model='gpt-4o',
+                messages=[{'role':'user','content':prompt_q}],
+                temperature=0.3
+            )
+        answer = resp_q.choices[0].message.content
+        st.markdown("### Respuesta de la IA")
+        st.write(answer)
 
 # === LOGO FINAL ===
 final_logo_path = "logo-julius.png"
