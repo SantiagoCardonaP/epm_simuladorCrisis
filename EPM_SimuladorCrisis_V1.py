@@ -73,6 +73,12 @@ except Exception:
 # === UPLOADER PARA BRIEFING ===
 brief_file = st.file_uploader("Briefing", type=["docx", "txt", "csv"])
 
+# === CAMPOS DE INPUT ADICIONALES ===
+contexto = st.text_area("Contexto", disabled=True)
+escenario1 = st.text_area("Escenario 1", disabled=True)
+escenario2 = st.text_area("Escenario 2", disabled=True)
+escenario3 = st.text_area("Escenario 3 (opcional)", disabled=True)
+
 # === FUNCIONES AUXILIARES ===
 def md_to_html(txt):
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", txt)
@@ -148,21 +154,12 @@ if brief_file:
     # Botón para generar y descargar informe
     if st.button('Generar informe'):
         prompt_md = f"""
-Por favor, genera un informe de crisis estructurado con:
+Por favor, genera un informe estructurado con el título: 'Escenarios de Crisis'.
 
-# Informe de Crisis
+Este es el prompt que debes usar como base:
+{base_prompt}
 
-## 1. Escenario más factible
-- Descripción detallada.
-
-## 2. Percepciones
-- Lista de percepciones clave.
-
-## 3. Recomendaciones
-- Lista de recomendaciones accionables.
-
-Incluye tablas cuando aplique. Usa el siguiente contenido como briefing:
-
+Incluye tablas cuando aplique. Usa el siguiente contenido como brief:
 {briefing}
 """
         with st.spinner('Generando informe...'):
