@@ -62,6 +62,14 @@ st.markdown(
     </div>
     """, unsafe_allow_html=True)
 
+# === CARGA DE PROMPT BASE ===
+try:
+    base_doc = Document("Prompt_base.docx")
+    base_prompt = "\n".join(p.text for p in base_doc.paragraphs)
+except Exception:
+    st.error("No se pudo cargar 'Prompt_base.docx'. Asegúrate de tener el archivo en el directorio.")
+    st.stop()
+
 # === CAMPOS DE INPUT PRELLENADOS ===
 contexto = st.text_area(
     "Contexto",
