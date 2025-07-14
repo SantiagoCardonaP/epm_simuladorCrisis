@@ -10,7 +10,7 @@ from reportlab.platypus import (
     ListFlowable, ListItem
 )
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 import re
 
@@ -80,10 +80,13 @@ escenario2 = st.text_area("Escenario 2", disabled=True)
 escenario3 = st.text_area("Escenario 3 (opcional)", disabled=True)
 
 # === FUNCIONES AUXILIARES ===
-def md_to_html(txt):
-    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", txt)
+def md_to_html(text: str) -> str:
+    """Reemplaza negritas Markdown por HTML"""
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
 
-def parse_markdown(md_text):
+
+def parse_markdown(md_text: str):
+    """Convierte un texto en Markdown a una lista de flowables de ReportLab"""
     styles = getSampleStyleSheet()
     story = []
     table_buffer = []
@@ -91,8 +94,10 @@ def parse_markdown(md_text):
 
     def flush_table():
         nonlocal table_buffer, in_table
-        table = Table(table_buffer, hAlign='LEFT')
-        table.setStyle(TableStyle([
+        if not table_buffer:
+            return
+        tbl = Table(table_buffer, hAlign='LEFT')
+        tbl.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ff5722')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -101,13 +106,13 @@ def parse_markdown(md_text):
             ('LEFTPADDING', (0, 0), (-1, -1), 4),
             ('RIGHTPADDING', (0, 0), (-1, -1), 4),
         ]))
-        story.append(table)
+        story.append(tbl)
         story.append(Spacer(1, 12))
         table_buffer = []
         in_table = False
 
-    for line in md_text.split("\n"):
-        # tabla markdown
+    for line in md_text.splitlines():
+        # Tablas Markdown
         if re.match(r"^\s*\|[-\s|]+$", line):
             continue
         if line.startswith('|') and line.count('|') > 1:
@@ -117,21 +122,29 @@ def parse_markdown(md_text):
             continue
         if in_table:
             flush_table()
-        # encabezados
-        if line.startswith('# '):
-            story.append(Paragraph(md_to_html(line[2:]), styles['Heading1']))
+        # Encabezados
+        if line.startswith('###### '):
+            story.append(Paragraph(md_to_html(line[7:]), styles['Heading6']))
+        elif line.startswith('##### '):
+            story.append(Paragraph(md_to_html(line[6:]), styles['Heading5']))
+        elif line.startswith('#### '):
+            story.append(Paragraph(md_to_html(line[5:]), styles['Heading4']))
+        elif line.startswith('### '):
+            story.append(Paragraph(md_to_html(line[4:]), styles['Heading3']))
         elif line.startswith('## '):
             story.append(Paragraph(md_to_html(line[3:]), styles['Heading2']))
-        # listas numeradas
+        elif line.startswith('# '):
+            story.append(Paragraph(md_to_html(line[2:]), styles['Heading1']))
+        # Listas numeradas
         elif re.match(r"^\d+\.\s+", line):
             num, text = re.match(r"^(\d+)\.\s+(.+)", line).groups()
             item = Paragraph(md_to_html(text), styles['Normal'])
             story.append(ListFlowable([ListItem(item, value=int(num))], bulletType='1', leftIndent=12))
-        # viñetas
+        # Viñetas
         elif line.startswith('- '):
             item = Paragraph(md_to_html(line[2:]), styles['Normal'])
             story.append(ListFlowable([ListItem(item)], bulletType='bullet', leftIndent=12))
-        # párrafo normal
+        # Párrafos
         else:
             if not line.strip():
                 story.append(Spacer(1, 8))
@@ -141,17 +154,18 @@ def parse_markdown(md_text):
         flush_table()
     return story
 
+# === LÓGICA PRINCIPAL ===
 if brief_file:
+    # Leer briefing
     if brief_file.name.lower().endswith('.docx'):
-        doc = Document(brief_file)
-        briefing = "\n".join(p.text for p in doc.paragraphs)
+        docx = Document(brief_file)
+        briefing = "\n".join(p.text for p in docx.paragraphs)
     elif brief_file.name.lower().endswith('.txt'):
         briefing = brief_file.read().decode('utf-8')
     else:
-        df_br = pd.read_csv(brief_file)
-        briefing = df_br.to_csv(index=False)
+        df = pd.read_csv(brief_file)
+        briefing = df.to_csv(index=False)
 
-    # Botón para generar y descargar informe
     if st.button('Generar informe'):
         prompt_md = f"""
 Por favor, genera un informe estructurado con el título: 'Escenarios de Crisis'.
@@ -170,7 +184,7 @@ Incluye tablas cuando aplique. Usa el siguiente contenido como brief:
             )
         md = resp.choices[0].message.content
 
-        # Generar PDF usando ReportLab
+        # Generar PDF
         buffer_pdf = io.BytesIO()
         doc_pdf = SimpleDocTemplate(buffer_pdf,
                                      rightMargin=2*cm, leftMargin=2*cm,
@@ -179,16 +193,15 @@ Incluye tablas cuando aplique. Usa el siguiente contenido como brief:
         doc_pdf.build(story)
         pdf_bytes = buffer_pdf.getvalue()
 
-        # Botón de descarga centrado y estilizado
         b64 = base64.b64encode(pdf_bytes).decode()
         download_html = f"""
-<div style=\"display:flex;justify-content:center;align-items:center;margin:20px 0;\"> 
-  <a href=\"data:application/pdf;base64,{b64}\" download=\"informe_crisis.pdf\" style=\"color:#ffffff;font-weight:bold;padding:12px 24px;border-radius:50px;text-decoration:none;font-size:16px;\">Descargar informe PDF</a>
+<div style="display:flex;justify-content:center;align-items:center;margin:20px 0;"> 
+  <a href="data:application/pdf;base64,{b64}" download="informe_crisis.pdf" style="color:#ffffff;font-weight:bold;padding:12px 24px;border-radius:50px;text-decoration:none;font-size:16px;">Descargar informe PDF</a>
 </div>
 """
         st.markdown(download_html, unsafe_allow_html=True)
 
-    # === PREGUNTAS ABIERTAS EN FORMULARIO ===
+    # Preguntas abiertas
     st.markdown("<h3>¿Tienes alguna pregunta adicional sobre la simulación?</h3>", unsafe_allow_html=True)
     with st.form("preguntas_form"):
         user_input = st.text_area("Escribe tu pregunta aquí…")
