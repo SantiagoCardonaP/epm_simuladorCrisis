@@ -13,7 +13,6 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 import re
-import markdown
 
 # === CONFIGURACIÓN CLIENTE OPENAI ===
 client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
@@ -81,47 +80,138 @@ escenario2 = st.text_area("Escenario 2", disabled=True)
 escenario3 = st.text_area("Escenario 3 (opcional)", disabled=True)
 
 # === FUNCIONES AUXILIARES ===
-def md_to_html(md_text: str) -> str:
-    """Convierte Markdown a HTML válido usando la librería markdown"""
-    return markdown.markdown(md_text)
+def md_to_html(txt):
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", txt)
 
-# === GENERACIÓN DE INFORME PDF ===
-def generar_informe(md_sections: list[str], output_path: str = "informe.pdf"):
-    """Toma una lista de secciones en Markdown y genera un PDF formateado correctamente"""
-    doc = SimpleDocTemplate(output_path)
+def parse_markdown(md_text):
     styles = getSampleStyleSheet()
-    flowables = []
+    story = []
+    table_buffer = []
+    in_table = False
 
-    for sec in md_sections:
-        html = md_to_html(sec)
-        para = Paragraph(html, styles['Normal'])
-        flowables.append(para)
-        flowables.append(Spacer(1, 0.5 * cm))
+    def flush_table():
+        nonlocal table_buffer, in_table
+        table = Table(table_buffer, hAlign='LEFT')
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#ff5722')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(table)
+        story.append(Spacer(1, 12))
+        table_buffer = []
+        in_table = False
 
-    doc.build(flowables)
+    for line in md_text.split("\n"):
+        # tabla markdown
+        if re.match(r"^\s*\|[-\s|]+$", line):
+            continue
+        if line.startswith('|') and line.count('|') > 1:
+            cells = [c.strip() for c in line.strip('|').split('|')]
+            table_buffer.append(cells)
+            in_table = True
+            continue
+        if in_table:
+            flush_table()
+        # encabezados
+        if line.startswith('# '):
+            story.append(Paragraph(md_to_html(line[2:]), styles['Heading1']))
+        elif line.startswith('## '):
+            story.append(Paragraph(md_to_html(line[3:]), styles['Heading2']))
+        # listas numeradas
+        elif re.match(r"^\d+\.\s+", line):
+            num, text = re.match(r"^(\d+)\.\s+(.+)", line).groups()
+            item = Paragraph(md_to_html(text), styles['Normal'])
+            story.append(ListFlowable([ListItem(item, value=int(num))], bulletType='1', leftIndent=12))
+        # viñetas
+        elif line.startswith('- '):
+            item = Paragraph(md_to_html(line[2:]), styles['Normal'])
+            story.append(ListFlowable([ListItem(item)], bulletType='bullet', leftIndent=12))
+        # párrafo normal
+        else:
+            if not line.strip():
+                story.append(Spacer(1, 8))
+            else:
+                story.append(Paragraph(md_to_html(line), styles['Normal']))
+    if in_table:
+        flush_table()
+    return story
 
-# === LÓGICA PRINCIPAL ===
 if brief_file:
-    # Leer contenido
-    if brief_file.type == "text/plain":
-        text = str(brief_file.read(), 'utf-8')
-    elif brief_file.type == "text/csv":
-        df = pd.read_csv(brief_file)
-        text = df.to_markdown()
+    if brief_file.name.lower().endswith('.docx'):
+        doc = Document(brief_file)
+        briefing = "\n".join(p.text for p in doc.paragraphs)
+    elif brief_file.name.lower().endswith('.txt'):
+        briefing = brief_file.read().decode('utf-8')
     else:
-        docx = Document(brief_file)
-        text = "\n".join(p.text for p in docx.paragraphs)
+        df_br = pd.read_csv(brief_file)
+        briefing = df_br.to_csv(index=False)
 
-    # Dividir en secciones según encabezados Markdown
-    sections = re.split(r"(?m)^##+\s*", text)
-    sections = [f"## {s}" for s in sections if s.strip()]
+    # Botón para generar y descargar informe
+    if st.button('Generar informe'):
+        prompt_md = f"""
+Por favor, genera un informe estructurado con el título: 'Escenarios de Crisis'.
 
-    # Generar informe
-    generar_informe(sections, output_path="informe_copia.pdf")
-    with open("informe_copia.pdf", "rb") as f:
-        st.download_button("Descargar Informe", f, file_name="informe.pdf")
-else:
-    st.info("Sube un briefing para generar el informe.")
+Este es el prompt que debes usar como base:
+{base_prompt}
+
+Incluye tablas cuando aplique. Usa el siguiente contenido como brief:
+{briefing}
+"""
+        with st.spinner('Generando informe...'):
+            resp = client.chat.completions.create(
+                model='gpt-4o',
+                messages=[{'role':'user','content':prompt_md}],
+                temperature=0.3
+            )
+        md = resp.choices[0].message.content
+
+        # Generar PDF usando ReportLab
+        buffer_pdf = io.BytesIO()
+        doc_pdf = SimpleDocTemplate(buffer_pdf,
+                                     rightMargin=2*cm, leftMargin=2*cm,
+                                     topMargin=2*cm, bottomMargin=2*cm)
+        story = parse_markdown(md)
+        doc_pdf.build(story)
+        pdf_bytes = buffer_pdf.getvalue()
+
+        # Botón de descarga centrado y estilizado
+        b64 = base64.b64encode(pdf_bytes).decode()
+        download_html = f"""
+<div style=\"display:flex;justify-content:center;align-items:center;margin:20px 0;\"> 
+  <a href=\"data:application/pdf;base64,{b64}\" download=\"informe_crisis.pdf\" style=\"color:#ffffff;font-weight:bold;padding:12px 24px;border-radius:50px;text-decoration:none;font-size:16px;\">Descargar informe PDF</a>
+</div>
+"""
+        st.markdown(download_html, unsafe_allow_html=True)
+
+    # === PREGUNTAS ABIERTAS EN FORMULARIO ===
+    st.markdown("<h3>¿Tienes alguna pregunta adicional sobre la simulación?</h3>", unsafe_allow_html=True)
+    with st.form("preguntas_form"):
+        user_input = st.text_area("Escribe tu pregunta aquí…")
+        submit = st.form_submit_button("Generar respuesta")
+        if submit and user_input:
+            prompt_q = f"""
+Toma el siguiente briefing y responde a la pregunta de forma clara:
+
+Briefing:
+{briefing}
+
+Pregunta:
+{user_input}
+"""
+            with st.spinner('Generando respuesta…'):
+                resp_q = client.chat.completions.create(
+                    model='gpt-4o',
+                    messages=[{'role':'user','content':prompt_q}],
+                    temperature=0.3
+                )
+            answer = resp_q.choices[0].message.content
+            st.markdown("### Respuesta de la IA")
+            st.write(answer)
 
 # === LOGO FINAL ===
 final_logo_path = "logo-julius.png"
