@@ -58,7 +58,14 @@ st.markdown(
 st.markdown(
     """
     <div style='position: relative; z-index: 1;'>
-        <h2 style='text-align: center;'>Genera tu informe a partir de los escenarios definidos</h2>
+        <h3 style='text-align: center;'>Escribe un contexto y sus posibles escenarios para iniciar la simulación</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <div style='position: relative; z-index: 1;'>
+        <h6 style='text-align: center;'>El simulador esta pre cargado con información para efectos de la demostración</h6>
     </div>
     """, unsafe_allow_html=True)
 
@@ -163,10 +170,10 @@ def parse_markdown(md_text: str):
     return story
 
 # === LÓGICA PRINCIPAL ===
-if st.button('Generar informe'):
+if st.button('Simular escenarios'):
     briefing = f"Contexto:\n{contexto}\n\nEscenario 1:\n{escenario1}\n\nEscenario 2:\n{escenario2}\n\nEscenario 3:\n{escenario3}"
     prompt_md = f"""
-Por favor, genera un informe estructurado con el título: 'Escenarios de Crisis'.
+Por favor, genera un informe estructurado del escenario más probable con el título: 'Escenario de Crisis'.
 
 Este es el prompt que debes usar como base:
 {base_prompt}
